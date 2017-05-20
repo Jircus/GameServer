@@ -26,6 +26,9 @@ public class ServerThread extends Thread {
     private String nameOfPlayer2;
     private Message message;
     private ObjectOutputStream output1;
+    private ObjectOutputStream output2;
+    private ObjectInputStream input1;
+    private ObjectInputStream input2;
     
     /**
      * Creates new instance
@@ -45,7 +48,7 @@ public class ServerThread extends Thread {
     @Override
     public void run() {
         try {
-            ObjectInputStream input1 = new ObjectInputStream(socketOfPlayer1.getInputStream());
+            input1 = new ObjectInputStream(socketOfPlayer1.getInputStream());
             nameOfPlayer1 = input1.readObject().toString();
             System.out.println("First player name is " + nameOfPlayer1);
             server.addOutput("First player name is " + nameOfPlayer1);
@@ -56,11 +59,11 @@ public class ServerThread extends Thread {
             synchronized(this) {
                 this.wait();
             }
-            ObjectInputStream input2 = new ObjectInputStream(socketOfPlayer2.getInputStream());
+            input2 = new ObjectInputStream(socketOfPlayer2.getInputStream());
             nameOfPlayer2 = input2.readObject().toString();
             System.out.println("Second player name is " + nameOfPlayer2);
             server.addOutput("Second player name is " + nameOfPlayer2);
-            ObjectOutputStream output2 = new ObjectOutputStream(socketOfPlayer2.getOutputStream());
+            output2 = new ObjectOutputStream(socketOfPlayer2.getOutputStream());
             output2.writeObject("O");
             System.out.println("Second player symbol is O");
             server.addOutput("Second player symbol is O");
@@ -80,6 +83,7 @@ public class ServerThread extends Thread {
                 server.addOutput("Sending move to player " + nameOfPlayer2);
                 if(message.isWon() == true) {
                     System.out.println("Player " + nameOfPlayer1 + "has won");
+                    server.addOutput("Player " + nameOfPlayer1 + "has won");
                 }
                 message = (Message)input2.readObject();
                 System.out.println("Player " + nameOfPlayer2 + " placed symbol in row " + 
@@ -109,11 +113,27 @@ public class ServerThread extends Thread {
     }
     
     /**
-     * Sets connection of second player
+     * Sets socket for second player
      * @param socket 
      */
     public void setSocketOfPlayer2(Socket socket) {
         socketOfPlayer2 = socket;
+    }
+    
+    /**
+     * Close all streams in order to stop thread 
+     */
+    public void stopThread() {
+        try {
+            input1.close();
+            output1.close();
+            if(socketOfPlayer2 != null) {
+                input2.close();
+                output2.close();
+            }
+        } catch (IOException ex) {
+            Logger.getLogger(ServerThread.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
     
     /**
