@@ -27,23 +27,27 @@ public final class Server extends JFrame implements Runnable {
     
     private final ArrayList connectedClients;
     private final ArrayList activeThreads;
-    private ServerThread thread;
+    private GameThread gameThread;
     private JTextArea outputArea;
     private JButton startStopButton;
     private MouseAdapter adapter;
-    private ServerSocket serverSocket;
+    private ServerSocket gameServerSocket;
+    private ServerSocket chatServerSocket;
     private Thread thisThread;
     private final int port;
+    private final int secondPort;
     
     /**
      * Creates new instance
      * @param port 
+     * @param secondPort 
      */
-    public Server(int port) {
+    public Server(int port, int secondPort) {
         init();
         connectedClients = new ArrayList();
         activeThreads = new ArrayList();
         this.port = port;
+        this.secondPort = secondPort;
     }
     
     /**
@@ -52,47 +56,42 @@ public final class Server extends JFrame implements Runnable {
     @Override
     public void run() {    
         try {
-            System.out.println("Server started");
-            addOutput("Server started");
-            serverSocket = new ServerSocket(port);
-            System.out.println("Listening on " + serverSocket);
-            addOutput("Listening on " + serverSocket);
+            output("Server started");
+            gameServerSocket = new ServerSocket(port);
+            chatServerSocket = new ServerSocket(secondPort);
+            output("Listening on " + gameServerSocket + " and " + chatServerSocket);
             while(true) {
-                Socket socket = serverSocket.accept();
-                System.out.println("New connection " + socket);
-                addOutput("New connection " + socket);
+                Socket socket = gameServerSocket.accept();
+                Socket chatSocket = chatServerSocket.accept();
+                output("New connection " + socket + "and " + chatSocket);
                 connectedClients.add(socket);
                 if(connectedClients.size() % 2 == 0) {
-                    synchronized(thread) {
-                        if(thread.isPlayerConnected() == true) {
-                            thread.setSocketOfPlayer2(socket);
-                            System.out.println("Added second player to thread");
-                            addOutput("Added second player to thread");
-                            thread.notify();
+                    synchronized(gameThread) {
+                        if(gameThread.isPlayerConnected() == true) {
+                            gameThread.setSocketOfPlayer2(socket, chatSocket);
+                            output("Added second player to thread");
+                            gameThread.notify();
                         }
                         else {
-                            thread.notify();
-                            thread = new ServerThread(this, socket);
-                            activeThreads.add(thread);
-                            System.out.println("Created new thread [" +
-                                    activeThreads.indexOf(thread) + "]");
-                            addOutput("Created new thread [" +
-                                    activeThreads.indexOf(thread) + "]");
+                            gameThread.notify();
+                            gameThread = new GameThread(this, socket, chatSocket);
+                            gameThread.start();
+                            activeThreads.add(gameThread);
+                            output("Started new thread [" +
+                                    activeThreads.indexOf(gameThread) + "]");
                         }
                     }
                 }
                 else {
-                    thread = new ServerThread(this, socket);
-                    activeThreads.add(thread);
-                    System.out.println("Created new thread [" +
-                            activeThreads.indexOf(thread) + "]");
-                    addOutput("Created new thread [" + activeThreads.indexOf(thread) + "]");
+                    gameThread = new GameThread(this, socket, chatSocket);
+                    gameThread.start();
+                    activeThreads.add(gameThread);
+                    output("Started new thread [" + activeThreads.indexOf(gameThread) + "]");
                 }
             }
         } catch (IOException ex) {
             if(ex.toString().equals("java.net.SocketException: socket closed")) {
-                System.out.println("Server stopped");
-                addOutput("Server stopped");
+                output("Server stopped");
             }
             else {
                 Logger.getLogger(Server.class.getName()).log(Level.SEVERE, null, ex);
@@ -101,42 +100,39 @@ public final class Server extends JFrame implements Runnable {
     }
     
     /**
-     * Removes socket of disconnected client
-     * @param s 
+     * Removes sockets of disconnected client
+     * @param game 
+     * @param chat 
      */
-    public void removeConnection(Socket s) {
-        synchronized(connectedClients) {
-            connectedClients.remove(s);
-            System.out.println(s + " removed");
-            addOutput(s + " removed");
-            try {
-                s.close();
-            }
-            catch(IOException ie) {
-                Logger.getLogger(Server.class.getName()).log(Level.SEVERE, null, ie);
-            }
+    public void removeConnection(Socket game, Socket chat) {      
+        connectedClients.remove(game);
+        try {
+            game.close();
+            chat.close();
+            output(game + " and " + chat + " have been removed");
         }
+        catch(IOException ie) {
+            Logger.getLogger(Server.class.getName()).log(Level.SEVERE, null, ie);
+        }      
     }
     
     /**
      * Removes thread that stopped
      * @param thread 
      */
-    public void removeThread(Thread thread) {
-        synchronized(activeThreads){
-            int index = activeThreads.indexOf(thread);
-            activeThreads.remove(thread);
-            System.out.println("Thread [" + index + "] has stopped and has been removed");
-            addOutput("Thread [" + index + "] has stopped and has been removed");
-        }
+    public void removeThread(GameThread thread) {      
+        int index = activeThreads.indexOf(thread);
+        activeThreads.remove(thread);
+        output("Game thread [" + index + "] has stopped and has been removed");      
     }
     
     /**
      * Appends server output to GUI
      * @param message 
      */
-    public void addOutput(String message) {
+    public void output(String message) {
         outputArea.append(message + "\n");
+        System.out.println(message);
     }
     
     /**
@@ -189,16 +185,16 @@ public final class Server extends JFrame implements Runnable {
      */
     private void stopServer(MouseEvent e) {
         try {
-            synchronized(activeThreads) {
-                for(Object obj : activeThreads) {
-                    ServerThread th = (ServerThread)obj;
-                    synchronized(th) {
-                        th.notify();
-                        th.stopThread();    
-                    }
+            int size = activeThreads.size();
+            for(int i = 0; i < size; i++) {
+                GameThread th = (GameThread)activeThreads.get(0);
+                synchronized(th) {
+                    th.notify();
+                    th.stopThread();    
                 }
             }
-            serverSocket.close();
+            gameServerSocket.close();
+            chatServerSocket.close();
             startStopButton.removeMouseListener(adapter);
             adapter = new MouseAdapter() {
                 @Override
