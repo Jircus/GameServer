@@ -123,7 +123,7 @@ public final class Server extends JFrame implements Runnable {
     public void removeThread(GameThread thread) {      
         int index = activeThreads.indexOf(thread);
         activeThreads.remove(thread);
-        output("Game thread [" + index + "] has stopped and has been removed");      
+        output("Game thread [" + index + "] has stopped and has been removed");
     }
     
     /**
@@ -155,7 +155,7 @@ public final class Server extends JFrame implements Runnable {
         startStopButton.addMouseListener(adapter);
         this.add(startStopButton, BorderLayout.SOUTH);
         this.setDefaultCloseOperation(EXIT_ON_CLOSE);
-        this.setSize(500, 400);
+        this.setSize(750, 500);
         this.setLocationRelativeTo(null);
         this.setVisible(true);
     }
@@ -187,10 +187,13 @@ public final class Server extends JFrame implements Runnable {
         try {
             int size = activeThreads.size();
             for(int i = 0; i < size; i++) {
-                GameThread th = (GameThread)activeThreads.get(0);
+                GameThread th = (GameThread)activeThreads.get(0);                    
                 synchronized(th) {
                     th.notify();
-                    th.stopThread();    
+                    th.stopThread();
+                }
+                synchronized(this) {
+                    this.wait(100);
                 }
             }
             gameServerSocket.close();
@@ -205,7 +208,7 @@ public final class Server extends JFrame implements Runnable {
             startStopButton.addMouseListener(adapter);
             startStopButton.setText("Start server");
         }
-        catch (IOException ex) {
+        catch (IOException | InterruptedException ex) {
             Logger.getLogger(Server.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
